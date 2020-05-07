@@ -5,13 +5,14 @@
 #define ALIGN_DOWN(x, align)  (x & ~(align-1))
 #define ALIGN_UP(x, align)    ((x & (align-1))?ALIGN_DOWN(x,align)+align:x)
 
+template <class NtHeaders, class ImageThunkData>
 class PEFile {
 private:
     const char* fileName;
     size_t fileSize;
     char* data;
     _IMAGE_DOS_HEADER* pDosHeader = nullptr;
-    _IMAGE_NT_HEADERS* pNtHeaders = nullptr; //TODO::тут
+    NtHeaders* pNtHeaders = nullptr;
     WORD numberOfSections;
     DWORD sectionAligment;
     _IMAGE_SECTION_HEADER* pImageSectionHeader = nullptr;
@@ -35,41 +36,29 @@ private:
             return 0;
     }
 public:
-    PEFile(const char* filePath) {
-        fileName = filePath;
-        std::ifstream peFile;
-        peFile.open(filePath, std::ios::in | std::ios::binary);
-        if (!peFile.is_open())
-        {
-            std::cout << "Can't open file" << std::endl;
-            exit(1);
-        }
+    PEFile(const char *_fileName, size_t _fileSize, char *_data) {
+        fileName = _fileName;
+        fileSize = _fileSize;
+        data = _data;
 
-        // get the length of the file
-        peFile.seekg(0, std::ios::end);
-        fileSize = peFile.tellg();
-        peFile.seekg(0, std::ios::beg);
-
-        data = new char[fileSize];
-        peFile.read(data, fileSize);
-        peFile.close();
         pDosHeader = (_IMAGE_DOS_HEADER*)data;
         if (pDosHeader->e_magic != IMAGE_DOS_SIGNATURE) {
             std::cout << "Not Portable Executable file!";
             exit(1);
         }
-        pNtHeaders = (_IMAGE_NT_HEADERS*)&data[pDosHeader->e_lfanew];  //TODO::тут
+        pNtHeaders = (NtHeaders*) &data[pDosHeader->e_lfanew];
         numberOfSections = pNtHeaders->FileHeader.NumberOfSections;
         sectionAligment = pNtHeaders->OptionalHeader.SectionAlignment;
-        printf("File digit capacity:\t%s\n", pNtHeaders->OptionalHeader.Magic == 0x10b ? "x32" : "x");
-        pImageSectionHeader = (_IMAGE_SECTION_HEADER*)&data[pDosHeader->e_lfanew + sizeof(_IMAGE_NT_HEADERS)]; //TODO::тут
+        pImageSectionHeader = (_IMAGE_SECTION_HEADER*)&data[pDosHeader->e_lfanew + sizeof(NtHeaders)];
     }
+
     void printSections() {
         printf("File sections:\n");
         for (int i = 0; i < numberOfSections; ++i) {
             printf("\t%s\n", pImageSectionHeader[i].Name);
         }
     }
+
     void printTableImports() {
         auto directoryEntryImport = pNtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
         DWORD importOffset = rvaToOff(directoryEntryImport.VirtualAddress);
@@ -89,7 +78,7 @@ public:
             printf("\t%d:\t%s\n", j + 1, &data[nameOffset]);
 
             auto originalThunkOffset = rvaToOff(imageImportDescriptor[j].OriginalFirstThunk);
-            auto pImageOriginalThunkData = (IMAGE_THUNK_DATA32*)&data[originalThunkOffset]; //TODO::тут
+            auto pImageOriginalThunkData = (ImageThunkData*)&data[originalThunkOffset];
             for (int h = 0; pImageOriginalThunkData[h].u1.AddressOfData != 0; ++h) {
                 if (pImageOriginalThunkData[h].u1.AddressOfData > 0x80000000) {
                     printf("\t\t\tOrdinal: %x\n", (DWORD)pImageOriginalThunkData[h].u1.AddressOfData);
@@ -102,6 +91,7 @@ public:
             }
         }
     }
+
     void printBoundImports() {
         auto directoryEntryBoundImport = pNtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT];
 //        DWORD importOffset = rvaToOff(directoryEntryBoundImport.VirtualAddress);
@@ -142,6 +132,13 @@ public:
             printf("\t%d:\t%s\n", j + 1, &data[nameOffset]);
         }
     }
+
+    void printAllInfo() {
+        printSections();
+        printTableImports();
+        printBoundImports();
+        printDelayImports();
+    }
 };
 
 int main(int argc, const char* argv[]) {
@@ -150,11 +147,43 @@ int main(int argc, const char* argv[]) {
         std::getchar();
         return 1;
     }
-    PEFile file(argv[1]);
-    file.printSections();
-    file.printTableImports();
-    file.printBoundImports();
-    file.printDelayImports();
+
+    std::ifstream peFile;
+    peFile.open(argv[1], std::ios::in | std::ios::binary);
+    if (!peFile.is_open()) {
+        std::cout << "Can't open file" << std::endl;
+        exit(1);
+    }
+
+    IMAGE_DOS_HEADER header;
+    peFile.read((char *) &header, sizeof(IMAGE_DOS_HEADER));
+    peFile.seekg(header.e_lfanew + sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER));
+    WORD digitalCapacity;
+    peFile.read((char *) &digitalCapacity, sizeof(WORD));
+
+    // get the length of the file
+    peFile.seekg(0, std::ios::end);
+    size_t fileSize = peFile.tellg();
+    peFile.seekg(0, std::ios::beg);
+
+    char *data = new char[fileSize];
+    peFile.read(data, fileSize);
+    peFile.close();
+
+    printf("Magic: 0x%x\n", digitalCapacity);
+    if (digitalCapacity == IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
+        printf("File digitalCapacity: x32\n");
+        PEFile<IMAGE_NT_HEADERS32, IMAGE_THUNK_DATA32> file(argv[1], fileSize, data);
+        file.printAllInfo();
+    } else if (digitalCapacity == IMAGE_NT_OPTIONAL_HDR64_MAGIC) {
+        printf("File digitalCapacity: x64\n");
+        PEFile<IMAGE_NT_HEADERS64, IMAGE_THUNK_DATA64> file(argv[1], fileSize, data);
+        file.printAllInfo();
+    } else {
+        printf("Can't determine digitalCapacity\n");
+        exit(1);
+    }
+
     return 0;
 }
 
