@@ -16,6 +16,8 @@ private:
     WORD numberOfSections;
     DWORD sectionAligment;
     _IMAGE_SECTION_HEADER* pImageSectionHeader = nullptr;
+
+    //Определение секции по виртуальному адресу
     int defSection(DWORD rva) {
         for (int i = 0; i < numberOfSections; ++i)
         {
@@ -27,6 +29,7 @@ private:
         }
         return -1;
     }
+    //Конвертация виртуального адреса в оффсет
     DWORD rvaToOff(DWORD rva)
     {
         int indexSection = defSection(rva);
@@ -41,24 +44,31 @@ public:
         fileSize = _fileSize;
         data = _data;
 
+        //Проверяем файл на принадлежность к portable executable
         pDosHeader = (_IMAGE_DOS_HEADER*)data;
         if (pDosHeader->e_magic != IMAGE_DOS_SIGNATURE) {
             std::cout << "Not Portable Executable file!";
             exit(1);
         }
+        //Считываем Nt-headers по адресу указанному в DOS-header
         pNtHeaders = (NtHeaders*) &data[pDosHeader->e_lfanew];
+        //В Nt-header хранится заголовки и из них мы достаем нужные нам значения (количество секций, выравнивание секции)
         numberOfSections = pNtHeaders->FileHeader.NumberOfSections;
         sectionAligment = pNtHeaders->OptionalHeader.SectionAlignment;
+        //После Nt-header идут секции
         pImageSectionHeader = (_IMAGE_SECTION_HEADER*)&data[pDosHeader->e_lfanew + sizeof(NtHeaders)];
     }
-
+    //Вывод имен секций
     void printSections() {
         printf("File sections:\n");
         for (int i = 0; i < numberOfSections; ++i) {
             printf("\t%s\n", pImageSectionHeader[i].Name);
         }
     }
-
+    /**
+    * В Optional headers хранятся массив из DataDirectory из которых мы можем обратиться к разным таблицам импорта (и не только) 
+    * 3 метода ниже осуществляют вывод всех таблиц импорта (standard, bound, delay)
+    */
     void printTableImports() {
         auto directoryEntryImport = pNtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
         DWORD importOffset = rvaToOff(directoryEntryImport.VirtualAddress);
@@ -71,12 +81,7 @@ public:
         for (int j = 0; imageImportDescriptor[j].Name != 0; ++j) {
             auto rvaName = imageImportDescriptor[j].Name;
             DWORD nameOffset = rvaToOff(rvaName);
-            if (nameOffset == 0) {
-                std::cout << "How is it possible?" << std::endl;
-                exit(1);
-            }
             printf("\t%d:\t%s\n", j + 1, &data[nameOffset]);
-
             auto originalThunkOffset = rvaToOff(imageImportDescriptor[j].OriginalFirstThunk);
             auto pImageOriginalThunkData = (ImageThunkData*)&data[originalThunkOffset];
             for (int h = 0; pImageOriginalThunkData[h].u1.AddressOfData != 0; ++h) {
@@ -94,7 +99,6 @@ public:
 
     void printBoundImports() {
         auto directoryEntryBoundImport = pNtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT];
-//        DWORD importOffset = rvaToOff(directoryEntryBoundImport.VirtualAddress);
         DWORD importOffset = directoryEntryBoundImport.VirtualAddress;
         if (importOffset == 0) {
             printf("There's no bound imports :(\n");
@@ -104,12 +108,7 @@ public:
         printf("Bound imports:\n");
         for (int j = 0; imageBoundImportDescriptor[j].OffsetModuleName != 0; ++j) {
             DWORD nameOffset = imageBoundImportDescriptor[j].OffsetModuleName;
-            if (nameOffset == 0) {
-                std::cout << "How is it possible?" << std::endl;
-                exit(1);
-            }
             printf("\t%d:\t%s\n", j + 1, ((char *) imageBoundImportDescriptor) + nameOffset);
-            //imageBoundImportDescriptor.
         }
     }
 
@@ -125,10 +124,6 @@ public:
         for (int j = 0; imageDelayImportDescriptor[j].DllNameRVA != 0; ++j) {
             auto rvaName = imageDelayImportDescriptor[j].DllNameRVA;
             DWORD nameOffset = rvaToOff(rvaName);
-            if (nameOffset == 0) {
-                std::cout << "How is it possible?" << std::endl;
-                exit(1);
-            }
             printf("\t%d:\t%s\n", j + 1, &data[nameOffset]);
         }
     }
@@ -150,18 +145,19 @@ int main(int argc, const char* argv[]) {
 
     std::ifstream peFile;
     peFile.open(argv[1], std::ios::in | std::ios::binary);
+
     if (!peFile.is_open()) {
         std::cout << "Can't open file" << std::endl;
         exit(1);
     }
-
+    //До того, как создать класс PEfile, нужно понять разрядность файла 
+    //И в зависимости от разрядности воспользоваться в соответствующим шаблонным конструктором
     IMAGE_DOS_HEADER header;
     peFile.read((char *) &header, sizeof(IMAGE_DOS_HEADER));
     peFile.seekg(header.e_lfanew + sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER));
     WORD digitalCapacity;
     peFile.read((char *) &digitalCapacity, sizeof(WORD));
 
-    // get the length of the file
     peFile.seekg(0, std::ios::end);
     size_t fileSize = peFile.tellg();
     peFile.seekg(0, std::ios::beg);
