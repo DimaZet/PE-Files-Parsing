@@ -17,7 +17,7 @@ private:
     DWORD sectionAligment;
     _IMAGE_SECTION_HEADER* pImageSectionHeader = nullptr;
 
-    //Определение секции по виртуальному адресу
+    //РћРїСЂРµРґРµР»РµРЅРёРµ СЃРµРєС†РёРё РїРѕ РІРёСЂС‚СѓР°Р»СЊРЅРѕРјСѓ Р°РґСЂРµСЃСѓ
     int defSection(DWORD rva) {
         for (int i = 0; i < numberOfSections; ++i)
         {
@@ -29,7 +29,7 @@ private:
         }
         return -1;
     }
-    //Конвертация виртуального адреса в оффсет
+    //РљРѕРЅРІРµСЂС‚Р°С†РёСЏ РІРёСЂС‚СѓР°Р»СЊРЅРѕРіРѕ Р°РґСЂРµСЃР° РІ РѕС„С„СЃРµС‚
     DWORD rvaToOff(DWORD rva)
     {
         int indexSection = defSection(rva);
@@ -44,21 +44,21 @@ public:
         fileSize = _fileSize;
         data = _data;
 
-        //Проверяем файл на принадлежность к portable executable
+        //РџСЂРѕРІРµСЂСЏРµРј С„Р°Р№Р» РЅР° РїСЂРёРЅР°РґР»РµР¶РЅРѕСЃС‚СЊ Рє portable executable
         pDosHeader = (_IMAGE_DOS_HEADER*)data;
         if (pDosHeader->e_magic != IMAGE_DOS_SIGNATURE) {
             std::cout << "Not Portable Executable file!";
             exit(1);
         }
-        //Считываем Nt-headers по адресу указанному в DOS-header
+        //РЎС‡РёС‚С‹РІР°РµРј Nt-headers РїРѕ Р°РґСЂРµСЃСѓ СѓРєР°Р·Р°РЅРЅРѕРјСѓ РІ DOS-header
         pNtHeaders = (NtHeaders*) &data[pDosHeader->e_lfanew];
-        //В Nt-header хранится заголовки и из них мы достаем нужные нам значения (количество секций, выравнивание секции)
+        //Р’ Nt-header С…СЂР°РЅРёС‚СЃСЏ Р·Р°РіРѕР»РѕРІРєРё Рё РёР· РЅРёС… РјС‹ РґРѕСЃС‚Р°РµРј РЅСѓР¶РЅС‹Рµ РЅР°Рј Р·РЅР°С‡РµРЅРёСЏ (РєРѕР»РёС‡РµСЃС‚РІРѕ СЃРµРєС†РёР№, РІС‹СЂР°РІРЅРёРІР°РЅРёРµ СЃРµРєС†РёРё)
         numberOfSections = pNtHeaders->FileHeader.NumberOfSections;
         sectionAligment = pNtHeaders->OptionalHeader.SectionAlignment;
-        //После Nt-header идут секции
+       //РџРѕСЃР»Рµ Nt-header РёРґСѓС‚ СЃРµРєС†РёРё
         pImageSectionHeader = (_IMAGE_SECTION_HEADER*)&data[pDosHeader->e_lfanew + sizeof(NtHeaders)];
     }
-    //Вывод имен секций
+   //Р’С‹РІРѕРґ РёРјРµРЅ СЃРµРєС†РёР№
     void printSections() {
         printf("File sections:\n");
         for (int i = 0; i < numberOfSections; ++i) {
@@ -66,8 +66,8 @@ public:
         }
     }
     /**
-    * В Optional headers хранятся массив из DataDirectory из которых мы можем обратиться к разным таблицам импорта (и не только) 
-    * 3 метода ниже осуществляют вывод всех таблиц импорта (standard, bound, delay)
+    * Р’ Optional headers С…СЂР°РЅСЏС‚СЃСЏ РјР°СЃСЃРёРІ РёР· DataDirectory РёР· РєРѕС‚РѕСЂС‹С… РјС‹ РјРѕР¶РµРј РѕР±СЂР°С‚РёС‚СЊСЃСЏ Рє СЂР°Р·РЅС‹Рј С‚Р°Р±Р»РёС†Р°Рј РёРјРїРѕСЂС‚Р° (Рё РЅРµ С‚РѕР»СЊРєРѕ) 
+    * 3 РјРµС‚РѕРґР° РЅРёР¶Рµ РѕСЃСѓС‰РµСЃС‚РІР»СЏСЋС‚ РІС‹РІРѕРґ РІСЃРµС… С‚Р°Р±Р»РёС† РёРјРїРѕСЂС‚Р° (standard, bound, delay)
     */
     void printTableImports() {
         auto directoryEntryImport = pNtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT];
@@ -150,8 +150,8 @@ int main(int argc, const char* argv[]) {
         std::cout << "Can't open file" << std::endl;
         exit(1);
     }
-    //До того, как создать класс PEfile, нужно понять разрядность файла 
-    //И в зависимости от разрядности воспользоваться в соответствующим шаблонным конструктором
+    //Р”Рѕ С‚РѕРіРѕ, РєР°Рє СЃРѕР·РґР°С‚СЊ РєР»Р°СЃСЃ PEfile, РЅСѓР¶РЅРѕ РїРѕРЅСЏС‚СЊ СЂР°Р·СЂСЏРґРЅРѕСЃС‚СЊ С„Р°Р№Р»Р° 
+    //Р РІ Р·Р°РІРёСЃРёРјРѕСЃС‚Рё РѕС‚ СЂР°Р·СЂСЏРґРЅРѕСЃС‚Рё РІРѕСЃРїРѕР»СЊР·РѕРІР°С‚СЊСЃСЏ РІ СЃРѕРѕС‚РІРµС‚СЃС‚РІСѓСЋС‰РёРј С€Р°Р±Р»РѕРЅРЅС‹Рј РєРѕРЅСЃС‚СЂСѓРєС‚РѕСЂРѕРј
     IMAGE_DOS_HEADER header;
     peFile.read((char *) &header, sizeof(IMAGE_DOS_HEADER));
     peFile.seekg(header.e_lfanew + sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER));
